@@ -1,13 +1,22 @@
 # Fractal Frontend
 
-A Claude Code plugin for fractal frontend architecture. Provides a structured approach to organizing frontend projects with layered architecture, strict import rules, and fractal nesting.
+A Claude Code skill for fractal frontend architecture. Provides a structured approach to organizing frontend projects with layered architecture, strict import rules, and fractal nesting.
 
 Inspired by [Feature-Sliced Design](https://feature-sliced.design/) and [FEOD](https://habr.com/ru/companies/sportmaster_lab/articles/972410/).
 
 ## Install
 
+Copy the skill into your project:
+
 ```bash
-/plugin install aokzhl/fractal-frontend
+git clone https://github.com/aokzhl/fractal-frontend /tmp/fractal-frontend
+cp -r /tmp/fractal-frontend/skills/fractal-frontend .claude/skills/fractal-frontend
+```
+
+Or as a git submodule:
+
+```bash
+git submodule add https://github.com/aokzhl/fractal-frontend .claude/skills/fractal-frontend
 ```
 
 ## Architecture

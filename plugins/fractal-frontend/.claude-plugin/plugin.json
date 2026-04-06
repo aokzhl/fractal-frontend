@@ -1,8 +1,0 @@
-{
-  "name": "fractal-frontend",
-  "description": "Fractal frontend architecture skill. Layered project structure with strict import rules, fractal nesting, and pragmatic code placement decisions. Inspired by FSD and FEOD.",
-  "version": "1.0.0",
-  "author": {
-    "name": "Akzhol Satinov"
-  }
-}
