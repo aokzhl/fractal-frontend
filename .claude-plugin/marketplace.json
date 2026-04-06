@@ -1,0 +1,13 @@
+{
+  "name": "fractal-frontend",
+  "owner": {
+    "name": "Akzhol Satinov"
+  },
+  "plugins": [
+    {
+      "name": "fractal-frontend",
+      "source": "./plugins/fractal-frontend",
+      "description": "Fractal frontend architecture skill. Layered project structure with strict import rules, fractal nesting, and pragmatic code placement decisions."
+    }
+  ]
+}
