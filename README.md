@@ -1,6 +1,6 @@
 # Fractal Frontend
 
-A Claude Code skill for fractal frontend architecture. Provides a structured approach to organizing frontend projects with layered architecture, strict import rules, and fractal nesting.
+A skill for fractal frontend architecture. Provides a structured approach to organizing frontend projects with layered architecture, strict import rules, and fractal nesting.
 
 Inspired by [Feature-Sliced Design](https://feature-sliced.design/) and [FEOD](https://habr.com/ru/companies/sportmaster_lab/articles/972410/).
 
