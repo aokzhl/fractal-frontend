@@ -6,17 +6,8 @@ Inspired by [Feature-Sliced Design](https://feature-sliced.design/) and [FEOD](h
 
 ## Install
 
-Copy the skill into your project:
-
 ```bash
-git clone https://github.com/aokzhl/fractal-frontend /tmp/fractal-frontend
-cp -r /tmp/fractal-frontend/skills/fractal-frontend .claude/skills/fractal-frontend
-```
-
-Or as a git submodule:
-
-```bash
-git submodule add https://github.com/aokzhl/fractal-frontend .claude/skills/fractal-frontend
+npx skills add aokzhl/fractal-frontend
 ```
 
 ## Architecture
