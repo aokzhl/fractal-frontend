@@ -1,15 +1,15 @@
 # Layer Structure Reference
 
-Detailed folder structures, code examples, and naming conventions for each
-Fractal FSD layer. Use this reference when creating, reviewing, or
-reorganizing project structure.
+Detailed folder structures, code examples, and naming conventions for
+each layer. Use this reference when creating, reviewing, or reorganizing
+project structure.
 
 ---
 
 ## App Layer
 
-Application shell: providers, routing, layouts, global styles, entry point.
-Organized by segments or functional groups — no slices.
+Application shell: providers, routing, layouts, global styles, entry
+point. Organized by segments — no slices.
 
 ```text
 app/
@@ -20,30 +20,25 @@ app/
   app.tsx          ← Root component
 ```
 
-Routing is framework-specific. It can live in `app/` directly, or follow
+Routing is framework-specific. It can live in `app/` directly or follow
 framework conventions:
 
 - **Vite + any router**: `app/router.tsx`
-- **TanStack Router (file-based)**: `routes/` at src root (framework-managed)
-- **Next.js App Router**: `app/` at project root (framework-managed)
+- **TanStack Router (file-based)**: `routes/` at src root
+- **Next.js App Router**: `app/` at project root
 
 When the framework manages route files, they are **thin** — only routing
 config, params, guards. They import and render page components.
 
 ```typescript
-// Thin route file example (framework-managed)
+// Thin route file (framework-managed)
 // routes/$workspaceSlug/projects/index.tsx
 export const Route = createFileRoute('/$ws/projects/')({
   component: ProjectListPage,
 });
-
-// The actual page component lives in pages/
-// pages/projects/project-list-page.tsx
-export function ProjectListPage() { /* all UI logic here */ }
 ```
 
-**Layouts** live in `app/layouts/`. They define the page shell (sidebar +
-content area, centered auth card, etc.) and are consumed by routing.
+**Layouts** live in `app/layouts/`. They define the page shell.
 
 ```typescript
 // app/layouts/app-layout.tsx
@@ -60,84 +55,82 @@ export function AppLayout({ children }) {
 **Belongs in app:** Global providers, routing, layouts, global styles,
 error boundaries, analytics initialization.
 
-**Does not belong:** Feature-specific code, business logic, page-level UI.
+**Does not belong:** Feature-specific code, business logic, forms.
 
 ---
 
 ## Pages Layer
 
-Screens bound to routes. **Page-first approach** — pages own substantial
-logic. In early project stages, most code lives here.
+Screens bound to routes. Pages **compose** features and widgets — they
+are not the default home for business logic. But pages CAN own:
 
-A page slice is **a group of related pages by domain**, not a single
-screen. One slice can contain multiple page components:
+- Route-level orchestration between features (page facade, loader glue).
+- Page-scoped state that doesn't belong to any single feature.
+- Pure presentational UI used only on this page.
+
+A page slice groups pages by domain. One slice may contain several page
+components:
 
 ```text
 pages/
-  auth/                       ← One slice, multiple pages
+  auth/                       ← Slice
     ui/
-      LoginPage.tsx
-      SignupPage.tsx
-    model/
-      auth.ts
+      login-page.tsx          ← Thin: renders <LoginForm /> from features/auth
+      signup-page.tsx
     index.ts
-  issues/                     ← One slice, multiple pages
+  issues/                     ← Slice
     ui/
-      IssueListPage.tsx
-      IssueBoardPage.tsx
-      IssueRow.tsx
-      IssueCard.tsx
-    model/
-      issues.ts
+      issue-list-page.tsx     ← Composes features/issue-tracker
+      issue-board-page.tsx
     index.ts
-  profile/
+  landing/                    ← Slice
     ui/
-      ProfilePage.tsx
-      ProfileForm.tsx
-    model/
-      profile.ts
+      landing-page.tsx
+      hero.tsx                ← Page-only UI, no logic
+      features-grid.tsx       ← Page-only UI, no logic
     index.ts
 ```
 
-**Belongs in pages:** Page-specific UI, forms, validation, data fetching,
-state management, business logic. Even code that looks reusable stays here
-if it is simpler to keep local.
-
-**Does not belong:** Code genuinely reused in 2+ page slices (extract
-only when the team agrees).
-
-### Page Layout Patterns
-
-A page composes widgets, features, and entities from lower layers, plus
-its own local UI:
+### Example: page composing features
 
 ```typescript
-// pages/product-detail/ui/ProductDetailPage.tsx
+// pages/issues/ui/issue-list-page.tsx
+import { IssueList, FilterBar } from '@/features/issue-tracker';
 import { Header } from '@/widgets/header';
-import { AddToCart } from '@/features/add-to-cart';
-import { ProductCard } from '@/entities/product';
 
-export function ProductDetailPage({ productId }) {
-  const product = useProductDetail(productId); // local hook
-
+export function IssueListPage() {
   return (
     <>
       <Header />
-      <ProductCard data={product} />
-      <AddToCart productId={productId} />
-      <RelatedProducts products={product.related} /> {/* local */}
+      <FilterBar />
+      <IssueList />
     </>
   );
 }
 ```
 
-### Page-first workflow
+### Example: page-only UI
 
-```text
-Step 1:  pages/CheckoutPage.tsx (200 lines, all logic inside)
-            ↓ page grows, logic needs reuse
-Step 2:  features/checkout/ + pages/CheckoutPage.tsx (thin — composes)
+```typescript
+// pages/landing/ui/hero.tsx — no logic, lives only here
+export function Hero() {
+  return (
+    <section className="py-24">
+      <h1 className="text-4xl font-bold">Plan. Track. Ship.</h1>
+      <p>Linear-style task tracking.</p>
+      <CtaButton />
+    </section>
+  );
+}
 ```
+
+**Belongs in pages:** Route-level composition, page-only presentational
+UI, orchestration between features that doesn't belong in any single
+feature.
+
+**Does not belong:** Forms with business validation, data fetching for
+domain entities, state shared beyond the page. Those belong in features
+or entities.
 
 ---
 
@@ -150,27 +143,27 @@ same composition appears in 2+ pages.
 widgets/
   header/
     ui/
-      Header.tsx
-      Navigation.tsx
-      UserMenu.tsx
+      header.tsx
+      navigation.tsx
+      user-menu.tsx
     model/
       header.ts
     index.ts
   sidebar/
     ui/
-      Sidebar.tsx
+      sidebar.tsx
     model/
       sidebar.ts
     index.ts
 ```
 
-A widget composes features and entities:
+A widget composes features and entities and can own composition logic:
 
 ```typescript
-// widgets/product-catalog/ui/ProductCatalog.tsx
-import { ProductList, FilterPanel } from "@/features/catalog";
-import { AddToCartButton } from "@/features/cart";
-import { ProductCard } from "@/entities/product";
+// widgets/product-catalog/ui/product-catalog.tsx
+import { ProductList, FilterPanel } from '@/features/catalog';
+import { AddToCartButton } from '@/features/cart';
+import { ProductCard } from '@/entities/product';
 
 export function ProductCatalog() {
   return (
@@ -190,7 +183,8 @@ export function ProductCatalog() {
 ```
 
 **Belongs in widgets:** Navigation bars, sidebars, dashboards — complex
-blocks combining data from multiple entities/features.
+blocks combining data from multiple entities/features, reused across
+pages.
 
 **Does not belong:** Simple UI primitives (→ `shared/ui/`), single-use
 page sections (→ keep in page).
@@ -199,47 +193,86 @@ page sections (→ keep in page).
 
 ## Features Layer
 
-Independent, isolated business features. **Create only when used in 2+
-places** (or when a page outgrows flat structure).
+**The default home for new business code.** Features — cohesive
+product blocks with their own state, logic, and UI.
+
+> A feature is a cohesive product block, NOT a micro use-case. See
+> SKILL.md section 3 for the coherence criterion (shared domain +
+> shared user-flow + single product name).
 
 ```text
 features/
-  auth/
-    ui/
-      LoginForm.tsx
-      RegisterForm.tsx
-    model/
-      auth.ts               ← State + API calls
+  auth/                        ← One feature: login + signup + recovery
+    common/
+      model/
+        auth-session.ts        ← Shared across sub-features
+    modules/
+      login/
+        ui/
+          login-form.tsx
+        model/
+          login.ts
+        index.ts
+      signup/
+        ui/
+          signup-form.tsx
+        model/
+          signup.ts
+        index.ts
+      recovery/
+        ui/
+          recovery-form.tsx
+        model/
+          recovery.ts
+        index.ts
     index.ts
-  cart/
+  issue-tracker/               ← One feature: list + board + detail
+    common/
+      domain/
+        issue-filter.types.ts
+      model/
+        issue-filter.ts
+    modules/
+      issue-list/
+      issue-board/
+      issue-detail/
+    ui/
+      issue-tracker-shell.tsx
+    index.ts
+  cart/                        ← One feature: view, update, trigger checkout
     domain/
       cart.types.ts
     model/
       cart.ts
     ui/
-      CartButton.tsx
+      cart-button.tsx
+      cart-drawer.tsx
     index.ts
 ```
 
-Features have fractal nesting. For detailed internal structure, read
-`references/feature-anatomy.md`.
+Features grow fractally. A simple feature is flat; a complex one gets
+`common/` + `modules/`. See `references/feature-anatomy.md` and
+`references/fractal-nesting.md`.
 
-**Belongs in features:** Isolated units of business functionality — each
-feature encapsulates its own bounded context with state, logic, and UI.
+**Belongs in features:** Features with state, business logic, and UI.
+Use-cases (create-X, delete-X, apply-filter) are files inside features
+or sub-features — never top-level folders.
 
-**Does not belong:** Domain data models (→ `entities/`), infrastructure
-(→ `shared/`), UI primitives (→ `shared/`).
+**Does not belong:** Cross-feature domain data (→ `entities/`), pure
+infrastructure (→ `shared/`), UI primitives (→ `shared/`), one-off page
+UI without logic (→ `pages/`).
 
 ---
 
 ## Entities Layer
 
-Reusable business modules. **Create only when used in 2+ places.**
-Starting without this layer is valid.
+Reusable business modules. Two triggers:
 
-Entities are broader than strict FSD "domain models" — they can contain
-domain data, business logic, state, and primitive UI. Stateful business
-modules like session management and workspace context also belong here.
+1. **Pragmatic** — used by 2+ features.
+2. **Intentional** — team deliberately isolates the domain concept.
+
+Entities can contain domain data, services, business logic, and domain
+UI. Prefer the pragmatic trigger; use intentional extraction sparingly.
 
 ```text
 // Minimal entity — model only
@@ -256,7 +289,8 @@ entities/product/
   model/
     product.store.ts        ← State + API calls
   ui/
-    ProductCard.tsx          ← Primitive UI only
+    product-card.tsx        ← Domain UI
+    product-badge.tsx
   index.ts
 
 // Stateful business module
@@ -264,26 +298,31 @@ entities/session/
   domain/
     session.types.ts        ← Session, TokenPair types
   model/
-    session.store.ts        ← Current session state
+    session.store.ts
     token.ts                ← getToken, setToken, clearToken
   index.ts
 ```
 
-### Entity UI rules
+### Entity UI — what's allowed
 
-Entity `ui/` contains only **primitive components** — badge, avatar, card,
-status indicator. Complex UI (lists with filters, dialogs, forms) belongs
-in `features/`.
+Entity `ui/` = **domain presentation** without business actions:
 
-Entity components receive data **through props** — they don't pull
-dependencies on other entities. Wiring happens in upper layers.
+- ✅ Cards (`ProductCard`, `IssueCard`, `UserCard`)
+- ✅ Badges, avatars, status indicators, previews
+- ✅ Any read-only rendering of domain data
+
+- ❌ Forms with business validation, interactive dialogs, action
+  buttons with business logic — those are features
+- ❌ Importing from other entity UIs; entity UI receives data via props
+
+Wiring happens in higher layers.
 
 ```typescript
-// ✅ entities/project/ui/ProjectCard.tsx — pure, props only
-function ProjectCard({ name, openIssuesCount }: Props) { /* ... */ }
+// ✅ entities/issue/ui/issue-card.tsx — pure, props-only
+function IssueCard({ title, status, priority }: Props) { ... }
 
-// ❌ entities/project/ui/ProjectCard.tsx — reaches into another entity
-import { openIssuesCount } from "@/entities/issue";
+// ❌ reaching into another entity
+import { currentUser } from '@/entities/session';
 ```
 
 ### When entity, when feature
@@ -291,9 +330,11 @@ import { openIssuesCount } from "@/entities/issue";
 | Situation | Where |
 |---|---|
 | Data used by **multiple features** | `entities/` |
-| Data used by **one feature only** | `features/*/model/` |
-| Data starts in one feature, another needs it | Move to `entities/` |
-| Core domain entity (central to the whole app) | `entities/` from start |
+| Data used by **one feature only** | `features/<name>/model/` |
+| Data starts in one feature, another needs it → | move to `entities/` |
+| Central domain concept, deliberate isolation | `entities/` (intentional) |
+| Interactive form, dialog, action button with logic | `features/` |
+| Pure domain rendering (card, badge, avatar) | `entities/<name>/ui/` |
 
 ---
 
@@ -302,24 +343,24 @@ import { openIssuesCount } from "@/entities/issue";
 Infrastructure, UI kit, and utilities with **zero business logic**. No
 slices — organized by segments only.
 
-**No barrel `index.ts`** — import files directly for tree-shaking.
+**No barrel `index.ts`** — direct file imports only, for tree-shaking.
 
 ```text
 shared/
   ui/                ← Button, Input, Modal, Card, Badge, Avatar
   lib/               ← cn(), formatDate(), debounce()
-  api/               ← HTTP client, API helpers, route constants
+  api/               ← HTTP client, API helpers
   i18n/              ← Localization setup
   assets/            ← Images, fonts, icons
 ```
 
 ```typescript
-// ✅ Direct file imports
-import { Button } from "@/shared/ui/button";
-import { cn } from "@/shared/lib/cn";
+// ✅ direct file imports
+import { Button } from '@/shared/ui/button';
+import { cn } from '@/shared/lib/cn';
 
-// ❌ No barrel imports
-import { Button, cn } from "@/shared";
+// ❌ barrel
+import { Button, cn } from '@/shared';
 ```
 
 **Belongs in shared:** UI primitives, utility functions, HTTP client,
@@ -335,12 +376,12 @@ i18n configuration, analytics setup, assets.
 Configure `@/` alias for clean imports:
 
 ```typescript
-// ✅ Alias imports
-import { Button } from "@/shared/ui/button";
-import { useUser } from "@/entities/user";
+// ✅
+import { Button } from '@/shared/ui/button';
+import { useUser } from '@/entities/user';
 
-// ❌ Relative imports across layers
-import { Button } from "../../../shared/ui/button";
+// ❌ relative imports across layers
+import { Button } from '../../../shared/ui/button';
 ```
 
-Configure in both bundler config and `tsconfig.json` for IDE support.
+Configure in both bundler config and `tsconfig.json`.

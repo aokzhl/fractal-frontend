@@ -1,29 +1,30 @@
 # Practical Examples
 
-Concrete patterns for common scenarios within Fractal FSD. Examples are
-framework and library agnostic — focus on structure and placement, not
-specific tools.
+Concrete patterns for common scenarios. Examples are framework and
+library agnostic — focus on structure and placement, not specific
+tools.
 
 ---
 
 ## Authentication Pattern
 
-Auth spans three layers. The key question: what goes where?
+Auth spans two layers: a feature for the UI and flow, an entity for
+the session/tokens.
 
-### Tokens and session → entities/
+### Tokens and session → `entities/session/`
 
-Session is a reusable business module — it carries user context used
-across the app:
+Session is a reusable business module — user context consumed across
+the app (auth interceptors, protected routes, user avatars,
+permission checks):
 
 ```text
-entities/
-  session/
-    domain/
-      session.types.ts        ← Session, TokenPair types
-    model/
-      session.store.ts        ← Current session state
-      token.ts                ← getToken, setToken, clearToken
-    index.ts
+entities/session/
+  domain/
+    session.types.ts          ← Session, TokenPair
+  model/
+    session.store.ts          ← current session state
+    token.ts                  ← getToken, setToken, clearToken
+  index.ts
 ```
 
 ```typescript
@@ -31,7 +32,7 @@ entities/
 export interface Session {
   userId: string;
   email: string;
-  role: "admin" | "member";
+  role: 'admin' | 'member';
 }
 
 export interface TokenPair {
@@ -40,43 +41,54 @@ export interface TokenPair {
 }
 ```
 
-### Auth UI → pages (single use) or features (multi-use)
+### Auth UI and flow → `features/auth/`
+
+Login, signup, and password recovery share a domain (Credentials), a
+flow (authenticate / become logged in), and a product name (auth) —
+one feature with sub-features:
 
 ```text
-// If login form is only used on the login page:
-pages/login/
-  ui/
-    LoginPage.tsx
-    LoginForm.tsx
-  model/
-    login.ts              ← Form state, validation, API call
-  index.ts
-
-// If login form is reused (modal login + dedicated page):
 features/auth/
-  ui/
-    LoginForm.tsx
-    RegisterForm.tsx
-  model/
-    auth.ts               ← State + API calls
+  common/
+    model/
+      auth-api.ts             ← shared API client for auth endpoints
+  modules/
+    login/
+      ui/
+        login-form.tsx
+      model/
+        login.ts
+      index.ts
+    signup/
+      ui/
+        signup-form.tsx
+      model/
+        signup.ts
+      index.ts
+    recovery/
+      ui/
+        recovery-form.tsx
+      model/
+        recovery.ts
+      index.ts
   index.ts
 ```
 
-### User profile data → entities (when reused)
+### User profile data → `entities/user/`
+
+Create `entities/user/` only when user profile is needed in 2+
+features (avatars in comments, names in issue assignees), not just
+for auth.
 
 ```text
-// Do NOT create entities/user just for auth.
-// Create it only when user profile is needed in 2+ places
-// (e.g., avatars in comments, names in issue assignees).
-
 entities/user/
   domain/
-    user.types.ts         ← Profile: displayName, avatar, role
-    user.mapper.ts        ← DTO → domain
+    user.types.ts             ← profile: displayName, avatar, role
+    user.mapper.ts            ← DTO → domain
   model/
-    user.store.ts         ← State + API calls
+    user.store.ts             ← state + API calls
   ui/
-    UserAvatar.tsx         ← Primitive UI only
+    user-avatar.tsx           ← domain UI
   index.ts
 ```
 
@@ -84,9 +96,9 @@ entities/user/
 
 | What | Where | Why |
 |---|---|---|
-| Tokens, refresh, session state | `entities/session/` | Business module |
-| Login/register forms | `pages/` or `features/auth/` | UI + interaction |
-| User profile data | `entities/user/` | Domain model |
+| Tokens, refresh, session state | `entities/session/` | reusable business module |
+| Login / signup / recovery UI + flow | `features/auth/` with sub-features | one cohesive feature |
+| User profile data | `entities/user/` | domain model, reused across features |
 
 ---
 
@@ -97,13 +109,13 @@ A typical entity with all segments:
 ```text
 entities/product/
   domain/
-    product.types.ts      ← Domain type + constants
-    product.mapper.ts     ← DTO → Domain mapping
+    product.types.ts          ← domain type + constants
+    product.mapper.ts         ← DTO → domain mapping
   model/
-    product.store.ts      ← State + API calls
+    product.store.ts          ← state + API calls
   ui/
-    ProductCard.tsx        ← Primitive display component
-    ProductBadge.tsx
+    product-card.tsx          ← domain display component
+    product-badge.tsx
   index.ts
 ```
 
@@ -120,8 +132,8 @@ export interface Product {
 }
 
 // entities/product/domain/product.mapper.ts
-import type { ProductDTO } from "@/shared/api/product";
-import type { Product } from "./product.types";
+import type { ProductDTO } from '@/shared/api/product';
+import type { Product } from './product.types';
 
 export const toProduct = (dto: ProductDTO): Product => ({
   id: dto.id,
@@ -136,29 +148,25 @@ export const toProduct = (dto: ProductDTO): Product => ({
 
 ```typescript
 // entities/product/model/product.store.ts
-import { httpClient } from "@/shared/api/client";
-import { toProduct } from "../domain/product.mapper";
+import { httpClient } from '@/shared/api/client';
+import { toProduct } from '../domain/product.mapper';
 
-// API calls + state in one place
 export const productApi = {
   getById: async (id: string) => {
     const dto = await httpClient.get(`/products/${id}`);
     return toProduct(dto);
   },
   getAll: async () => {
-    const dtos = await httpClient.get("/products");
+    const dtos = await httpClient.get('/products');
     return dtos.map(toProduct);
   },
 };
-
-// Store that holds product data, exposes getById, list, etc.
-// Specific implementation depends on your state manager
 ```
 
-### ui/ — primitive components only
+### ui/ — domain display (props-only)
 
 ```typescript
-// entities/product/ui/ProductCard.tsx
+// entities/product/ui/product-card.tsx
 // Receives data through props — no dependencies on other entities
 
 interface ProductCardProps {
@@ -182,155 +190,194 @@ export function ProductCard({ name, formattedPrice, isOnSale }: ProductCardProps
 
 ```typescript
 // entities/product/index.ts
-export type { Product } from "./domain/product.types";
-export { toProduct } from "./domain/product.mapper";
-export { productApi, productStore } from "./model/product.store";
-export { ProductCard } from "./ui/ProductCard";
-export { ProductBadge } from "./ui/ProductBadge";
+export type { Product } from './domain/product.types';
+export { toProduct } from './domain/product.mapper';
+export { productApi } from './model/product.store';
+export { ProductCard } from './ui/product-card';
+export { ProductBadge } from './ui/product-badge';
 ```
 
 ---
 
-## Complex Feature with Sub-Modules
+## Complex Feature with Sub-Features
 
-A checkout feature with delivery and payment sub-blocks:
+An `issue-tracker` feature with list, board, and detail sub-features:
 
 ```text
-features/checkout/
+features/issue-tracker/
   common/
     domain/
-      order-draft.types.ts      ← Shared between delivery + payment
+      issue-filter.types.ts
     model/
-      order-draft.store.ts      ← Shared state
+      issue-filter.ts         ← shared filter state
+      issue-selection.ts      ← shared multi-select
   modules/
-    delivery-form/
+    issue-list/
       model/
-        delivery.ts
+        issue-list.ts
       ui/
-        DeliveryForm.tsx
+        issue-list.tsx
+        issue-row.tsx
       index.ts
-    payment-form/
+    issue-board/
       model/
-        payment.ts
+        issue-board.ts
+        drag-drop.ts
       ui/
-        PaymentForm.tsx
+        issue-board.tsx
+        board-column.tsx
+      index.ts
+    issue-detail/
+      model/
+        issue-detail.ts
+      ui/
+        issue-detail.tsx
       index.ts
   model/
-    checkout.facade.ts          ← Orchestrates modules
+    issue-tracker.facade.ts   ← orchestrates sub-features
   ui/
-    CheckoutLayout.tsx          ← Composes module UIs
+    issue-tracker-shell.tsx   ← composes sub-feature UIs
   index.ts
 ```
 
 ### Orchestration in model/
 
 ```typescript
-// features/checkout/model/checkout.facade.ts
-import { deliveryModel } from "../modules/delivery-form";
-import { paymentModel } from "../modules/payment-form";
-import { orderDraftStore } from "../common/model/order-draft.store";
+// features/issue-tracker/model/issue-tracker.facade.ts
+import { issueListModel } from '../modules/issue-list';
+import { issueBoardModel } from '../modules/issue-board';
+import { issueFilter } from '../common/model/issue-filter';
 
-export const checkoutFacade = {
-  submit: async () => {
-    const delivery = deliveryModel.getValues();
-    const payment = paymentModel.getValues();
-    const draft = orderDraftStore.getDraft();
-    return api.createOrder({ ...draft, delivery, payment });
+export const issueTrackerFacade = {
+  applyFilter(filter: IssueFilter) {
+    issueFilter.set(filter);
+    issueListModel.refresh();
+    issueBoardModel.refresh();
   },
-  isValid: () => deliveryModel.isValid() && paymentModel.isValid(),
 };
 ```
 
 ### Composition in ui/
 
 ```typescript
-// features/checkout/ui/CheckoutLayout.tsx
-import { DeliveryForm } from "../modules/delivery-form";
-import { PaymentForm } from "../modules/payment-form";
-import { checkoutFacade } from "../model/checkout.facade";
+// features/issue-tracker/ui/issue-tracker-shell.tsx
+import { IssueList } from '../modules/issue-list';
+import { IssueBoard } from '../modules/issue-board';
+import { View } from '../common/model/view';
 
-export function CheckoutLayout() {
-  return (
-    <form onSubmit={checkoutFacade.submit}>
-      <DeliveryForm />
-      <PaymentForm />
-      <button disabled={!checkoutFacade.isValid()}>Place Order</button>
-    </form>
-  );
+export function IssueTrackerShell() {
+  const view = View.use();
+  return view === 'list' ? <IssueList /> : <IssueBoard />;
 }
 ```
 
 ---
 
-## Page Evolution
+## Feature Growth
 
-How a page grows from fat to thin:
+How a feature grows with complexity — organically, without fixed
+stages or thresholds. A flat feature is valid; a complex one nests.
 
-### Step 1: Fat page (all logic inside)
+### Stage A: Simple feature, flat
 
 ```text
-pages/products/
-  ui/
-    ProductsPage.tsx       ← 300 lines: list, filters, cards
-    ProductCard.tsx
-    FilterBar.tsx
+features/favorites/
   model/
-    products.ts            ← State + API + filtering
+    favorites.ts              ← state + API + use-cases as functions
+  ui/
+    toggle-favorite.tsx
   index.ts
 ```
 
-### Step 2: Extract when it hurts
+### Stage B: Feature with domain segment
 
-Another page needs the same product list with filters. Team agrees to
-extract:
+Types grow enough to deserve a separate file:
 
 ```text
-// Extracted feature
-features/product-catalog/
-  model/
-    catalog.ts
-  ui/
-    ProductList.tsx
-    FilterBar.tsx
-  index.ts
-
-// Extracted entity (used by catalog + other features)
-entities/product/
+features/cart/
   domain/
-    product.types.ts
+    cart.types.ts
+  model/
+    cart.ts                   ← state + API + use-cases
   ui/
-    ProductCard.tsx
-  index.ts
-
-// Page becomes thin — just composes
-pages/products/
-  ui/
-    ProductsPage.tsx       ← 30 lines: imports and renders
+    cart-button.tsx
+    cart-drawer.tsx
   index.ts
 ```
+
+### Stage C: Feature with sub-features
+
+Two+ distinct cohesive UI-blocks emerge and need shared code. **At any
+of these signals**, pause and consider restructuring:
+
+- The feature has grown too large to hold in your head.
+- Responsibility inside the feature needs to be split between people.
+- Part of the feature now deserves its own documentation.
+
+```text
+features/issue-tracker/
+  common/
+    domain/
+    model/
+  modules/
+    issue-list/
+    issue-board/
+  ui/
+  model/
+  index.ts
+```
+
+A valid answer at any signal is "not yet" — but only after you paused
+and asked.
+
+---
+
+## Page Composes, Doesn't Own Business Logic
+
+Pages always stay thin. They compose features and widgets, and may own
+page-level orchestration or page-only presentational UI.
+
+```typescript
+// pages/products/ui/product-list-page.tsx
+import { ProductCatalog } from '@/widgets/product-catalog';
+import { Header } from '@/widgets/header';
+
+export function ProductListPage() {
+  return (
+    <>
+      <Header />
+      <ProductCatalog />
+    </>
+  );
+}
+```
+
+If a page grows a lot of its own logic, that's a signal the logic
+actually belongs to a feature (business logic) or a widget
+(composition) — extract it.
 
 ---
 
 ## Widget Composition
 
-A header widget that composes features from different domains:
+A header widget composes features from different domains:
 
 ```text
 widgets/header/
   ui/
-    Header.tsx
-    Navigation.tsx
-    UserMenu.tsx
+    header.tsx
+    navigation.tsx
+    user-menu.tsx
   model/
     header.ts
   index.ts
 ```
 
 ```typescript
-// widgets/header/ui/Header.tsx
-import { WorkspaceSwitcher } from "@/features/workspace";
-import { UserAvatar } from "@/entities/user";
-import { Navigation } from "./Navigation";
+// widgets/header/ui/header.tsx
+import { WorkspaceSwitcher } from '@/features/workspace';
+import { UserAvatar } from '@/entities/user';
+import { Navigation } from './navigation';
 
 export function Header() {
   return (
@@ -353,16 +400,16 @@ page's local UI.
 
 | Type scope | Location |
 |---|---|
-| API response/request shapes | `shared/api/` or contracts package |
+| API response/request shapes (DTOs) | `shared/api/` or contracts package |
 | Domain model for a reused entity | `entities/*/domain/` |
-| Types used only in one page | `pages/*/model/` or `pages/*/domain/` |
-| Types used only in one feature | `features/*/model/` or `features/*/domain/` |
+| Types used only in one feature | `features/*/domain/` or `features/*/model/` |
+| Types used only in one page | `pages/*/ui/` local types |
 | Generic utility types (`Nullable<T>`) | `shared/lib/types.ts` |
 | Infrastructure types (HTTP config) | `shared/api/` |
 
 **Rule:** Raw API shapes (DTOs) stay close to transport. Domain models
-with business logic go in entities. If you only need the raw shape and
-have no business logic, a shared types file is sufficient.
+with business meaning go in entities or features. If you only need the
+raw shape and have no business logic, a shared types file is enough.
 
 ---
 
@@ -373,13 +420,14 @@ have no business logic, a shared types file is sufficient.
 | Does it have **zero** logic and **zero** state? | UI primitive or utility | `shared/` |
 | Is it **infrastructure** with no business context? | HTTP client, i18n, analytics | `shared/` |
 | Is it a **reusable business module**? | Domain model, session, workspace | `entities/` |
-| Is it a **user-facing capability**? | Feature with UI + state | `features/` |
+| Is it a **user-facing feature**? | Feature with UI + state + flow | `features/` |
 
 ```text
-shared/ui/button.tsx                ← Zero logic, zero state
-shared/lib/cn.ts                    ← Pure utility
-shared/api/client.ts                ← Infrastructure (HTTP client)
-entities/session/model/token.ts     ← Business module (session state)
-entities/user/domain/user.ts        ← Business module (User profile)
-features/auth/model/auth.ts         ← User capability (login flow)
+shared/ui/button.tsx              ← zero logic, zero state
+shared/lib/cn.ts                  ← pure utility
+shared/api/client.ts              ← infrastructure (HTTP client)
+entities/session/model/token.ts   ← business module (session state)
+entities/user/domain/user.ts      ← business module (user profile)
+entities/product/ui/product-card.tsx ← domain UI (pure display)
+features/auth/model/login.ts      ← feature (login flow)
 ```

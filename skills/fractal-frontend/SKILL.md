@@ -3,40 +3,49 @@ name: fractal-frontend
 description: >
   Fractal frontend architecture skill. Use when organizing project structure
   with layers, deciding where code belongs, defining public APIs and import
-  boundaries, working with fractal nesting, or deciding whether logic should
-  remain local or be extracted.
+  boundaries, working with fractal nesting, resolving cross-feature
+  communication, or deciding whether code should be promoted between layers.
 ---
 
 # Fractal Frontend
 
-> Fractal architecture for frontend projects. Inspired by Feature-Sliced
-> Design and FEOD. Strictness can be adjusted based on project scale and
-> team context.
+> Fractal feature-first architecture. Inspired by FEOD and Evolution
+> Design (ED). Rules define defaults; teams deviate with a reason.
 
 ---
 
-## 1. Core Philosophy & Layer Overview
+## 1. Core Philosophy
 
-Core principle: **"Start simple, extract when needed."**
+- **Feature-first by default.** New business code lives in `features/`.
+  Not in `pages/`, not in `entities/`, not in `shared/`.
+- **Every layer can own logic appropriate to its scope** — except
+  `shared/`, which stays pure infrastructure (no business logic, ever).
+- **Cross-feature imports are always forbidden.** Features don't know
+  about other features. They communicate through `entities/`,
+  composition in pages/widgets, or events — see section 4.
+- **Modules grow organically.** No fixed stages, no mandatory thresholds.
+  A flat module stays flat if the work is flat; it segments or nests only
+  when real complexity demands it.
+- **Not all layers are required.** Most projects start with `app/`,
+  `pages/`, `features/`, and `shared/`. Add `entities/` and `widgets/`
+  on signal.
 
-Place code in `pages/` first. Duplication across pages is acceptable and does
-not automatically require extraction. Extract only when the team agrees.
+---
 
-**Not all layers are required.** Most projects start with `app/`, `pages/`,
-and `shared/`. Add other layers only when they provide clear value.
+## 2. Layers & Import Rules
 
-Fractal FSD uses 6 layers with strict top-down import direction:
+Six layers, strictly top-down imports:
 
 ```text
 app/       → Application shell: providers, router, layouts, CSS theme
-pages/     → Screens bound to routes. Page-first approach — start fat
+pages/     → Screens bound to routes. Compose + page-level orchestration
 widgets/   → Compositions of features reused across multiple pages
-features/  → Business features — isolated modules
-entities/  → Reusable business modules — domain data, stores, logic, primitive UI
+features/  → Business features — isolated modules (not micro use-cases)
+entities/  → Reusable business modules — domain data, services, domain UI
 shared/    → Infrastructure, UI kit, utilities — zero business logic
 ```
 
-### Import Rules
+### Import direction
 
 ```text
 app/       →  pages, widgets, features, entities, shared
@@ -52,310 +61,376 @@ Import only through `index.ts`. Never reach into module internals.
 **Exception:** `shared/` has no barrel `index.ts` — import files directly
 for tree-shaking.
 
-**Cross-import restrictions:**
+### Cross-import restrictions (same-layer)
 
-- Features do NOT import other features
-- Widgets do NOT import other widgets
-- Entities CAN import other entities (prefer `import type`, avoid cycles)
+- **Features ✗ features** — always. Use section 4.
+- **Widgets ✗ widgets** — always.
+- **Entities ✓ entities** — allowed, prefer `import type`, avoid cycles.
 
 ### Routing
 
-Routing lives in `app/` or follows framework conventions (Next.js `app/`,
-TanStack Router `routes/`, etc.). Route files are **thin** — they import
-and render page components, nothing more.
+Lives in `app/` or framework convention (TanStack Router `routes/`,
+Next.js `app/`, etc.). Route files are **thin** — import and render page
+components.
 
 ---
 
-## 2. Decision Framework
+## 3. What Makes One Feature
 
-When writing new code, follow this tree:
+> **Important:** A *feature* is a cohesive product block — NOT a
+> micro use-case (single user action).
 
-**Step 1 — Where is this code used?**
+### Coherence criterion (from ED)
 
-- Used in only one page → keep it in that page.
-- Used in 2+ pages but duplication is manageable → keeping separate copies
-  in each page is also valid.
-- An entity or feature used in only one page → keep it in that page.
+> "Все эти вещи должны иметь высокую смысловую связность."
 
-**Step 2 — Is it a UI primitive, utility, or infrastructure with zero
-business logic?**
+One feature = a block with **high semantic cohesion**. Three signs of
+cohesion (prefer 3 out of 3):
 
-- UI components → `shared/ui/`
-- Utility functions → `shared/lib/`
-- HTTP client, API helpers → `shared/api/`
-- i18n, analytics → `shared/i18n/`, `shared/analytics/`
+1. **Shared domain** — one primary domain concept (Issue, Credentials,
+   Comment).
+2. **Shared user-flow** — actions inside converge on one primary flow
+   (all auth actions → "logged in" state; all issue actions → "manage
+   the issue").
+3. **Single product name** — SPEC/PM/team calls it by one name ("the
+   auth feature", "the issue tracker").
 
-**Step 3 — Is it a complete user action reused in 2+ places, and does the
-team agree to extract it?**
+If only 1–2 match, lean toward splitting into two features.
 
-- Yes → `features/`
-- Uncertain or single use → keep in the page.
+### Diagnostic (from ED)
 
-**Step 4 — Is it a reusable business module (domain model, session,
-workspace context) used in 2+ places?**
+> "Если между фичами у вас много импортов, скорее всего фичи выделены
+> неверно!"
 
-- Yes → `entities/`
-- Uncertain or single use → keep in the page.
+When you find yourself wanting to cross-import often, the boundary is
+wrong. Don't reach for an escape hatch — **redraw the boundary** or
+extract the shared part to an `entity`.
 
-**Step 5 — Is it a composition of features reused across multiple pages?**
+### Size guidance
 
-- Yes → `widgets/`
-- One page only → keep in the page.
+> "Не делайте фичи мелкими! Нормально, когда на первых этапах у вас
+> 3–4 фичи."
 
-**Step 6 — Is it app-wide configuration?**
+Features are **large blocks**, not individual use-cases. Typical
+project: 3–10 features. Use-cases (create-X, edit-X, delete-X) live
+**inside** a feature as files or sub-features, not as top-level folders.
 
-- Global providers, router, layouts → `app/`
+**Examples of correct granularity:**
 
-**Golden Rule: When in doubt, keep it in `pages/`. Extract only when the
-team agrees.**
+| ✅ One feature (with use-cases inside) | ❌ Each use-case as a feature |
+|---|---|
+| `features/auth/` (login, signup, recovery) | `features/login/` + `features/signup/` + `features/recovery/` |
+| `features/issue-tracker/` (list, detail, board, filters, create) | `features/issue-list/` + `features/issue-create/` + … |
+| `features/comments/` (post, edit, delete, mention) | `features/post-comment/` + `features/delete-comment/` + … |
 
----
+### Modules inside a feature (fractal nesting)
 
-## 3. Quick Placement Table
-
-| Scenario              | Single use                                  | Multi-use (with team agreement)       |
-| --------------------- | ------------------------------------------- | ------------------------------------- |
-| User profile form     | `pages/profile/ui/ProfileForm.tsx`          | `features/profile-form/`             |
-| Product card          | `pages/products/ui/ProductCard.tsx`         | `entities/product/ui/ProductCard.tsx` |
-| Data fetching         | `pages/product-detail/model/product.ts`     | `entities/product/model/`             |
-| Auth tokens/session   | `entities/session/` (always)                | `entities/session/` (always)         |
-| Auth login form       | `pages/login/ui/LoginForm.tsx`              | `features/auth/`                     |
-| HTTP client           | `shared/api/` (always)                      | `shared/api/` (always)               |
-| Generic Card layout   | —                                           | `shared/ui/card.tsx`                 |
-| Date formatting util  | —                                           | `shared/lib/format-date.ts`          |
-| Sidebar navigation    | `app/layouts/sidebar.tsx`                   | `widgets/sidebar/`                   |
-
----
-
-## 4. Architectural Rules (MUST)
-
-These rules are the foundation. Violations weaken the architecture. If you
-must break a rule, document the reason and get team consensus.
-
-### 4-1. Import only from lower layers
-
-`app → pages → widgets → features → entities → shared`. Upward
-imports and cross-imports between slices on the same layer are forbidden
-(except entities → entities).
-
-### 4-2. Public API — every module exports through index.ts
-
-External consumers import only from a module's `index.ts`. Direct imports
-of internal files are forbidden.
-
-```typescript
-// ✅ Correct
-import { LoginForm } from "@/features/auth";
-
-// ❌ Violation — bypasses public API
-import { LoginForm } from "@/features/auth/ui/LoginForm";
-```
-
-**Exception:** `shared/` has no barrel index — import files directly:
-
-```typescript
-// ✅ Correct
-import { cn } from "@/shared/lib/cn";
-import { Button } from "@/shared/ui/button";
-
-// ❌ Violation — barrel import from shared
-import { cn, Button } from "@/shared";
-```
-
-### 4-3. No cross-imports between features or widgets
-
-Features never import other features. Widgets never import other widgets.
-If they need to interact, the layer above (page or widget) composes them.
-
-### 4-4. Domain-based file naming
-
-Name files after the business domain, not their technical role:
+When one feature grows enough to warrant internal structure, split its
+parts into `modules/`. **What a module represents is a team call** —
+a sub-feature (smaller cohesive block), a use-case (single user
+action), or a mix. Granularity inside a feature is up to the team.
 
 ```text
-// ❌ Technical-role naming
-model/types.ts          ← Which types? User? Order? Mixed?
-model/utils.ts
-
-// ✅ Domain-based naming
-model/user.ts           ← User types + related logic
-model/order.ts          ← Order types + related logic
-model/profile.ts
+features/issue-tracker/
+  common/              ← shared across modules
+    domain/
+    model/
+  modules/             ← sub-features, use-cases, or a mix — team decides
+    issue-list/        ← sub-feature
+    issue-board/       ← sub-feature
+    create-issue/      ← use-case (if team prefers it as a folder)
+  ui/                  ← feature-level composition
+  model/               ← feature-level orchestration
+  index.ts
 ```
 
-### 4-5. No business logic in shared/
+The **top-level** `features/<name>/` still must be a cohesive block,
+not a single use-case (section 3 coherence criterion). The freedom to
+pick structure applies **inside** a feature, not at the top level.
 
-`shared/` contains only infrastructure, UI kit, and utilities — zero
-business logic. Business calculations, domain rules, and workflows
-belong in `entities/` or higher.
+See `references/fractal-nesting.md` for the import rules and
+composition pattern.
 
-### 4-6. Segment dependency is unidirectional
+---
+
+## 4. Cross-Feature Communication
+
+Feature A needs something from feature B. **Direct import is always
+forbidden.** Pick one of four paths:
+
+```text
+1. Needs domain data or business logic?
+   → Extract to entities/. Both features read from the entity.
+
+2. Needs to render feature B's UI inside A's UI?
+   → Compose at the parent layer (page or widget). Parent imports both.
+
+3. Needs to trigger an action in B when A does something?
+   → Event bus, or an action exposed by an entity. Contract is explicit.
+
+4. Needs a utility with zero business logic?
+   → Move to shared/lib/.
+```
+
+**Never:** `import { ... } from '@/features/B'` from inside `features/A`.
+
+Details, code patterns, and edge cases: see
+`references/cross-feature-communication.md`.
+
+**Diagnostic:** If none of the four paths feels right, the feature
+boundary is probably wrong. Redraw before coding around the rule.
+
+---
+
+## 5. Decision Framework — Where Does Code Live?
+
+```text
+New code → Is it:
+
+┌─ Infrastructure with zero business logic (UI primitive, utility,
+│  HTTP client, i18n, assets)?
+│     → shared/  (see segments below)
+│
+├─ A reusable business module (domain data, service, domain UI)
+│  that is:
+│    (a) used by 2+ features, OR
+│    (b) intentionally extracted by the team?
+│     → entities/<name>/
+│
+├─ A composition of features reused across 2+ pages?
+│     → widgets/<name>/
+│
+├─ Page-specific orchestration, layout, route-level state, or
+│  pure presentational UI used only on one page?
+│     → pages/<slice>/
+│
+└─ Everything else (new feature business code)?
+     → features/<name>/     ← the default home
+```
+
+### Where pages fit
+
+Pages compose features and widgets, and may own:
+
+- Route-level orchestration between features (page facade, loader glue).
+- Page-level state that doesn't belong to any single feature.
+- Pure presentational UI used only on this page (hero block, decorative
+  sections, one-off layout fragments).
+
+Pages **do not** own: business rules of their own, reusable forms,
+shared data fetching. Those belong in features or entities.
+
+### Where entities fit (two triggers)
+
+1. **Pragmatic:** code is actually used by 2+ features.
+2. **Intentional:** team deliberately isolates the domain concept.
+
+> Caveat for the intentional trigger: it's cheap to overuse. "I want
+> it cleaner" alone is not enough. Prefer the pragmatic trigger when
+> in doubt; extract intentionally only when the domain concept is
+> clearly first-class in the product.
+
+### Module growth — when to restructure
+
+No fixed stages, no mandatory sizes. Three signals (from FEOD) say
+**"pause and consider restructuring"**:
+
+1. The module has grown too large to hold in your head.
+2. Responsibility inside the module needs to be split between people.
+3. Part of the module now deserves its own documentation.
+
+Useful review indicators (non-mandatory):
+
+- More than ~6–8 files at one level.
+- Single file over ~400 lines.
+- You can't quickly point to where a concern lives.
+- Two distinct concerns are tangled (data + UI + API in one file).
+
+A valid response is "not yet" — but only after you paused and asked.
+
+---
+
+## 6. Quick Placement Table
+
+| Scenario | Single use | Reused (by 2+ features) |
+|---|---|---|
+| Login/signup forms | `features/auth/` (one feature, sub-features inside) | same |
+| User profile form | `features/profile/` | `features/profile/` + `entities/user/` (data) |
+| Product card (display only) | `features/<name>/ui/ProductCard.tsx` | `entities/product/ui/ProductCard.tsx` |
+| Product data fetching, types | `entities/product/` | `entities/product/` |
+| Add-to-cart interaction | `features/cart/` | `features/cart/` |
+| Session / tokens / current user | `entities/session/` (always) | `entities/session/` |
+| HTTP client | `shared/api/` (always) | `shared/api/` |
+| Generic Card/Button/Input | `shared/ui/` | `shared/ui/` |
+| Date formatting util | `shared/lib/` | `shared/lib/` |
+| Sidebar navigation | `app/layouts/` | `widgets/sidebar/` |
+| Landing-page hero (no logic) | `pages/landing/ui/Hero.tsx` | — |
+| Page-level data orchestration across features | `pages/<slice>/model/` | — |
+
+---
+
+## 7. Architectural Rules (MUST)
+
+Violations weaken the architecture. If you must break a rule, document
+the reason and get team agreement.
+
+### 7-1. Import direction
+
+`app → pages → widgets → features → entities → shared`. Upward imports
+are forbidden.
+
+### 7-2. No cross-imports between features or widgets
+
+`features/A` never imports from `features/B`. Widgets never import
+other widgets. If they need to interact, use section 4.
+
+### 7-3. Public API — every module exports through `index.ts`
+
+```typescript
+// ✅
+import { LoginForm } from "@/features/auth";
+
+// ❌ bypasses public API
+import { LoginForm } from "@/features/auth/modules/login/ui/LoginForm";
+```
+
+**Exception:** `shared/` has no barrel — direct file imports only.
+
+### 7-4. No business logic in `shared/`
+
+`shared/` = UI kit + infrastructure + utilities. Business logic,
+domain rules, and workflows belong in `entities/` or `features/`.
+
+### 7-5. Domain-based file naming
+
+```text
+// ❌
+model/types.ts          ← Which types?
+model/utils.ts
+
+// ✅
+model/user.ts           ← User types + user logic
+model/issue.ts
+```
+
+### 7-6. Segment dependency is unidirectional
 
 ```text
 domain → model → ui
 ```
 
-Never import backwards (e.g., `domain/` importing from `model/`).
+Never import backwards. See section 10 for segments.
+
+### 7-7. Top-level features are not single use-cases
+
+`features/<name>/` at the top level is a cohesive product block
+(section 3), never a single user action. `features/create-issue/` is
+wrong — that logic belongs inside `features/issue-tracker/`. Inside a
+feature, teams are free to organize `modules/` however fits (section
+3).
 
 ---
 
-## 5. Recommendations (SHOULD)
+## 8. Anti-patterns (AVOID)
 
-### 5-1. Pages First — place code where it is used
-
-Place code in `pages/` first. Extract to lower layers only when truly needed.
-
-**What stays in pages:**
-
-- Large UI blocks used only in one page
-- Page-specific forms, validation, data fetching, state management
-- Page-specific business logic and API integrations
-- Code that looks reusable but is simpler to keep local
-
-**Evolution pattern:** Start with everything in `pages/profile/`. When
-another page needs the same user data and the team agrees, extract the
-shared model to `entities/user/`. Keep page-specific UI in the page.
-
-### 5-2. Be conservative with entities
-
-Entities are reusable business modules — broader than strict FSD "domain
-models". They can contain domain data, business logic, state, and
-primitive UI. Session management, workspace context, and similar stateful
-business modules also belong here.
-
-The entities layer is highly accessible — almost every other layer can
-import from it, so changes propagate widely.
-
-1. **Start without entities.** `app/` + `pages/` + `shared/` is valid.
-2. **Do not split slices prematurely.** Keep code in pages.
-3. **Place it in entities only when 2+ consumers are confirmed.**
-
-**Exception:** Core domain entities that are clearly central to the whole
-app (Issue in a tracker, Product in e-commerce, Session in an auth system)
-can go to `entities/` from the start. This is domain awareness, not
-premature abstraction.
-
-### 5-3. Start with minimal layers
-
-```text
-// ✅ Valid minimal project
-src/
-  app/         ← Providers, routing, layouts
-  pages/       ← All page-level code
-  shared/      ← Infrastructure, UI kit, utils
-
-// Add layers only when the team decides they are needed:
-// + entities/  ← When business modules are reused in 2+ places
-// + features/  ← When user interactions are reused in 2+ places
-// + widgets/   ← When compositions are reused across pages
-```
-
-### 5-4. entities/ vs shared/ — know the boundary
-
-Ask: "Does this have business context or just plumbing?"
-
-- Business context (session, workspace, domain data) → `entities/`
-- Pure plumbing (HTTP client, i18n, UI kit, utils) → `shared/`
-
-| Code                          | shared/ | entities/ | features/ |
-| ----------------------------- | ------- | --------- | --------- |
-| HTTP client, interceptors     | ✅      |           |           |
-| i18n configuration            | ✅      |           |           |
-| Session, token refresh        |         | ✅        |           |
-| Current workspace context     |         | ✅        |           |
-| Type `Product`, `toProduct()` |         | ✅        |           |
-| `productApi.getById()`        |         | ✅        |           |
-| Product list with filters     |         |           | ✅        |
-| Create product dialog         |         |           | ✅        |
+- **Creating a feature per use-case.** `features/create-issue/` is
+  wrong; it's a file inside `features/issue-tracker/`.
+- **Cross-importing between features.** Use section 4 paths. If none
+  fit, your feature boundary is wrong.
+- **Putting business logic in `shared/`.** Infrastructure only.
+- **Creating an entity "because it feels cleaner"** without the
+  pragmatic trigger or a clear intentional reason.
+- **Splitting one cohesive feature into many small ones.** If the
+  domain and flow are shared, it's one feature with sub-features.
+- **Merging truly independent features into one** to bypass the
+  no-cross-import rule. Use entities or composition instead.
+- **Technical-role file names** (`types.ts`, `utils.ts`). Use the
+  domain name.
+- **Empty layer directories "just in case."** Add a layer when it
+  earns its place.
+- **Skipping the public API.** `index.ts` is the only entrance.
 
 ---
 
-## 6. Anti-patterns (AVOID)
+## 9. Entity UI — What's Allowed
 
-- **Do not create entities prematurely.** Data used in one place belongs
-  in that place.
-- **Do not put business logic in shared/.** Infrastructure and utilities only.
-- **Do not extract single-use code.** A feature used by one page stays
-  in that page.
-- **Do not use technical-role file names.** Use domain-based names.
-- **Do not create common/ + modules/ in advance.** Add when the feature
-  outgrows a flat structure (2+ distinct sub-blocks).
-- **Do not create god features.** Features with broad responsibilities
-  should be split (e.g., `user-management/` → `auth/`, `profile-edit/`).
-- **Be cautious adding UI to entities.** Entity UI should only be
-  imported from higher layers — never from other entities.
-- **Do not create empty layer directories** "just in case."
+Entity `ui/` is for **domain presentation** — components that render
+domain data without owning business actions:
+
+- ✅ Cards (ProductCard, IssueCard, UserCard)
+- ✅ Avatars, badges, status indicators, previews
+- ✅ Read-only domain rendering
+
+- ❌ Interactive forms, dialogs, action buttons with business logic
+  (those are features)
+- ❌ Importing from other entities (entity UI is pure — receives data
+  via props)
+
+Wiring (fetching data, triggering actions, combining entities) happens
+in higher layers: features, widgets, pages.
 
 ---
 
-## 7. Segments
+## 10. Segments
 
-Each module (in `entities/`, `features/`, and feature's `common/`)
+Each module (in `features/`, `entities/`, and sub-feature `common/`)
 is organized into 3 segments with unidirectional dependency:
 
 ```text
 domain → model → ui
 ```
 
-| Segment   | Purpose                                    | Depends on   |
-| --------- | ------------------------------------------ | ------------ |
-| `domain/` | Types, mappers, pure operations            | nothing      |
-| `model/`  | State, stores, actions, computed, API calls | `domain/`   |
-| `ui/`     | Components                                 | all above    |
+| Segment   | Purpose                                     | Depends on |
+|-----------|---------------------------------------------|------------|
+| `domain/` | Types, mappers, pure operations             | nothing    |
+| `model/`  | State, stores, actions, computed, API calls | `domain/`  |
+| `ui/`     | Components                                  | all above  |
 
-**Segments are a recommendation, not a rigid rule.** `domain/model/ui` is
-the default set, but you can adapt it to your needs: remove segments that
-add no value, or introduce custom ones (e.g., `service/` for API calls,
-`lib/` for internal helpers) when the module demands it. The only hard
-rule is **unidirectional dependency** — lower segments must not import
-from higher ones.
+**Segments are a default, not a mandate.** Add `api/`, `lib/`,
+`service/` if they earn their place. The only hard rule is
+**unidirectional dependency**.
 
-Not all segments are required. Start with what you need.
-
-If a segment has only one concern, the filename may match the module name
-(e.g., `features/auth/model/auth.ts`).
+Not all segments are required. A simple feature often ships with just
+`model/` + `ui/`.
 
 ---
 
-## 8. Quick Reference
+## 11. Quick Reference
 
+- **Default home for new code**: `features/`
 - **Import direction**: `app → pages → widgets → features → entities → shared`
-- **Minimal project**: `app/` + `pages/` + `shared/`
-- **Create entities when**: 2+ consumers share the same business module, and the team agrees
-- **Create features when**: 2+ consumers share the same user interaction, and the team agrees
+- **Minimal project**: `app/` + `pages/` + `features/` + `shared/`
+- **Create entities when**: used by 2+ features, or intentional extraction
+- **Create widgets when**: composition reused across 2+ pages
+- **Cross-feature imports**: always forbidden (section 4)
+- **Feature vs use-case**: feature = cohesive product block; use-case = file inside
+- **Modules inside a feature**: sub-features, use-cases, or a mix — team decides
 - **Segments**: `domain → model → ui` (unidirectional)
-- **Public API**: Import through `index.ts` (except `shared/` — direct file imports)
-- **No cross-imports**: features ✕ features, widgets ✕ widgets
-- **Entities cross-import**: allowed, prefer `import type`
-- **File naming**: Domain-based (`user.ts`, `order.ts`), never technical-role (`types.ts`)
-- **Routing**: In `app/` or per framework convention
-- **Layouts**: In `app/`
-- **entities/ vs shared/**: entities = reusable business modules, shared = infrastructure + UI kit + utils
+- **Public API**: through `index.ts` (except `shared/` — direct files)
+- **Cross-layer siblings**: features ✗ features, widgets ✗ widgets, entities ✓ entities
+- **File naming**: domain-based (`user.ts`, not `types.ts`)
+- **Module growth**: organic; pause and consider when size/complexity signals hit
+- **Entities vs shared**: entities = reusable business; shared = infrastructure
 
 ---
 
-## 9. Conditional References
+## 12. Conditional References
 
-Read reference files **only** when the specific situation applies.
-Do **not** preload all references.
+Read a reference **only** when its situation applies. Do not preload.
 
-- **When creating, reviewing, or reorganizing folder structure** for
-  layers and modules:
-  → Read `references/layer-structure.md`
+- **Creating, reviewing, or reorganizing layers and module folders**
+  → `references/layer-structure.md`
 
-- **When creating or restructuring a feature**, working with segments,
-  or the feature checklist:
-  → Read `references/feature-anatomy.md`
+- **Creating or restructuring a feature**, feature anatomy, segments
+  → `references/feature-anatomy.md`
 
-- **When a slice outgrows a flat structure** and needs common/ + modules/
-  (fractal nesting) — in features, entities, or widgets:
-  → Read `references/fractal-nesting.md`
+- **A feature outgrows a flat structure** and needs sub-features
+  (`common/` + `modules/`) — applies to features, entities, widgets
+  → `references/fractal-nesting.md`
 
-- **When resolving interaction between features**, deciding how features
-  communicate, or dealing with entity cross-imports:
-  → Read `references/cross-feature-communication.md`
+- **Resolving cross-feature interaction** or entity cross-imports
+  → `references/cross-feature-communication.md`
 
-- **When implementing concrete patterns** for authentication, CRUD
-  entities, complex features, page evolution, or widget composition:
-  → Read `references/practical-examples.md`
-  Note: If you already loaded `layer-structure.md` in this conversation,
-  address structure first, then load patterns in a follow-up step.
+- **Applying concrete patterns** — authentication, CRUD entity,
+  complex feature composition, widget assembly, type placement
+  → `references/practical-examples.md`
