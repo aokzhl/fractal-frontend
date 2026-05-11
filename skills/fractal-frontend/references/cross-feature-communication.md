@@ -19,8 +19,8 @@ import { applyPromoCode } from '@/features/promo';
 
 ### Diagnostic (ED)
 
-> "Если между фичами у вас много импортов, скорее всего фичи выделены
-> неверно!"
+> "If you have many imports between features, the features are
+> probably drawn incorrectly!"
 
 If you find yourself reaching for cross-imports often, the boundary
 between your features is probably wrong. Before adopting one of the

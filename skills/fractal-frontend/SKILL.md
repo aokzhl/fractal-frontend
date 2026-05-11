@@ -9,8 +9,8 @@ description: >
 
 # Fractal Frontend
 
-> Fractal feature-first architecture. Inspired by FEOD and Evolution
-> Design (ED). Rules define defaults; teams deviate with a reason.
+> Fractal feature-first architecture. Inspired by Feature-Sliced
+> Design (FSD), FEOD, and Evolution Design (ED). Rules define defaults; teams deviate with a reason.
 
 ---
 
@@ -82,7 +82,7 @@ components.
 
 ### Coherence criterion (from ED)
 
-> "Все эти вещи должны иметь высокую смысловую связность."
+> "All these things must have high semantic cohesion."
 
 One feature = a block with **high semantic cohesion**. Three signs of
 cohesion (prefer 3 out of 3):
@@ -99,8 +99,8 @@ If only 1–2 match, lean toward splitting into two features.
 
 ### Diagnostic (from ED)
 
-> "Если между фичами у вас много импортов, скорее всего фичи выделены
-> неверно!"
+> "If you have many imports between features, the features are
+> probably drawn incorrectly!"
 
 When you find yourself wanting to cross-import often, the boundary is
 wrong. Don't reach for an escape hatch — **redraw the boundary** or
@@ -108,8 +108,8 @@ extract the shared part to an `entity`.
 
 ### Size guidance
 
-> "Не делайте фичи мелкими! Нормально, когда на первых этапах у вас
-> 3–4 фичи."
+> "Don't make features small! It's normal to have 3–4 features in the
+> early stages."
 
 Features are **large blocks**, not individual use-cases. Typical
 project: 3–10 features. Use-cases (create-X, edit-X, delete-X) live
